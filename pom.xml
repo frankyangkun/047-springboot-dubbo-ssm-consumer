@@ -18,13 +18,16 @@
 <!--    <groupId>com.frank.springboot</groupId>-->
     <artifactId>047-springboot-dubbo-ssm-consumer</artifactId>
 <!--    <version>0.0.1-SNAPSHOT</version>-->
+<!--    <version>v20220317</version>&lt;!&ndash;这是指定jar包的版本，不是docker镜像版本&ndash;&gt;-->
 
     <name>047-springboot-dubbo-ssm-consumer</name>
     <description>Demo project for Spring Boot</description>
 
-<!--    <properties>-->
-<!--        <java.version>1.8</java.version>-->
-<!--    </properties>-->
+    <properties>
+        <!--        <java.version>1.8</java.version>-->
+<!--        <docker.image.prefix>microservicedockerdemo</docker.image.prefix> &lt;!&ndash;2022-03-15一定不能有大写字母&ndash;&gt;-->
+        <docker.image.prefix>frankyang1988</docker.image.prefix><!--2022-03-15前缀换成我dockerhub的仓库名，必须加这个前缀才能push成功-->
+    </properties>
 
     <dependencies>
         <!--dubbo，zk，thymeleaf，接口工程-->
@@ -84,6 +87,111 @@
             <plugin>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
+            </plugin>
+
+            <plugin>
+                <!--2022-03-11 Docker集成maven插件，自动生成DockerFile，打包成docker镜像 -->
+                <groupId>com.spotify</groupId>
+                <artifactId>docker-maven-plugin</artifactId>
+                <version>1.0.0</version>
+                <configuration>
+
+<!--                    <googleContainerRegistryEnabled>false</googleContainerRegistryEnabled> &lt;!&ndash;无法识别&ndash;&gt;-->
+
+                    <!--镜像名称：frankyang1988/047-springboot-dubbo-ssm-consumer-->
+                    <!--为了方便管理，dockerhub新建了047-springboot-dubbo-ssm-consumer仓库-->
+                    <imageName>${docker.image.prefix}/${project.artifactId}:v20220322
+                    </imageName><!--最终把标签直接加在镜像后面最靠谱-->
+                    <!--指定标签--><!--下面execution包含了tag，这里可以不打标签了-->
+                    <!--这里必须打，否则默认会打上latest，只能让后面execution跳过tag，不然会多出一个latest镜像来-->
+                    <!--经测试，注释掉了execution的tag，依然会有个latest，好像无论如何都必须先生成一个latest，然后再改tag-->
+                    <!--如果要用到execution，这里最好就不打tag了-->
+                    <!--试试forceTags标签，build时强制覆盖tag配合imageTags使用，默认false-->
+                    <!--查了它的作用：如需重复构建相同标签名称的镜像，可将forceTags设为true，这样就会覆盖构建相同标签的镜像-->
+<!--                    <imageTags>-->
+<!--&lt;!&ndash;                        <imageTag>${project.version}-v20220317</imageTag>&ndash;&gt;-->
+<!--                        <imageTag>v20220317</imageTag> &lt;!&ndash;结果是frankyang1988/047-springboot-dubbo-ssm-consumer:v20220317&ndash;&gt;-->
+<!--&lt;!&ndash;                        <forceTags>true</forceTags>&lt;!&ndash;结果版本变成「true」了，没达到效果&ndash;&gt;&ndash;&gt;-->
+<!--                    </imageTags>-->
+
+                    <!--基础镜像jdk1.8-->
+                    <baseImage>java</baseImage>
+                    <!--制作者提供本人信息-->
+                    <maintainer>yangkun yangkun@sefon.com</maintainer>
+                    <!--切换到ROOT目录-->
+                    <!--视频例子中是/ROOT，我觉得应该就是存放jar包和dockerfile的那个目录，我这里dockerfile是在根目录下，jar是target-->
+                    <!--2022-03-15经测试，workdir默认应该就是指向target，/ROOT是新建的目录，名字无所谓，这里是自动生成dockerfile，
+                    上面说的根目录下的dockerfile是手动创建的，不需用到docker-maven-plugin-->
+                    <workdir>/ROOT</workdir>
+                    <cmd>["java","-version"]</cmd>
+                    <entryPoint>["java","-jar","${project.build.finalName}.jar"]</entryPoint>
+
+                    <!--指定Dockerfile路径（没用它)-->
+                    <!--                    <dockerDirectory>${project.basedir}/src/main/docker</dockerDirectory>--><!--构建失败，找不到文件-->
+                    <!--                    <dockerDirectory>/src/main/docker</dockerDirectory>--><!--构建失败，找不到文件-->
+<!--                    <dockerDirectory></dockerDirectory> &lt;!&ndash;dockerfile放到项目根目录就不用指定了&ndash;&gt;-->
+
+                    <!--指定远程docker api地址，把镜像上传到这个服务器-->
+                    <dockerHost>http://131.10.10.73:2375</dockerHost> <!--必须指定远程端口2375，提前打开远程docker服务器的此端口-->
+
+                    <!--复制jar包到docker容器指定的目录配置，构建完后会在target下自动生成一个docker目录-->
+                    <resources>
+                        <resource>
+                            <targetPath>/ROOT</targetPath> <!--这里和上面workdir保持一致就好-->
+                            <!--用于指定需要复制的根目录，${project.build.directory}表示target目录-->
+                            <directory>${project.build.directory}</directory>
+                            <!--用于指定需要复制的文件，${project.build.finalName}.jar，打包后的jar文件-->
+                            <include>${project.build.finalName}.jar</include>
+                        </resource>
+                    </resources>
+
+                    <!--2022-03-17 与maven配置文件settings.xml中配置的server.id一致，用于推送镜像 -->
+                    <serverId>docker-hub</serverId><!--此配置好像没用，最终没成功，放弃自动push，手动来执行push命令-->
+<!--                    <registryUrl>frankyang1988/047-springboot-dubbo-ssm-consumer</registryUrl>--><!--此配置好像没用-->
+<!--                    <registryUrl>rqvoxnb2.mirror.aliyuncs.com</registryUrl>--><!--尝试失败-->
+<!--                    <registryUrl>registry.hub.docker.com</registryUrl>--><!--尝试失败-->
+
+                    <!--2022-03-18只要有这句，就算<execution>只有build阶段，mvn clean package也可push，不过我没push成功，放弃自动push，手动执行push-->
+<!--                    <pushImage>true</pushImage>-->
+
+                    <!--这里配置了也没用，网上说是安装docker-toolbox时用，并且在pom种配置dockerHost-->
+<!--                    <dockerCertPath>/Users/yang/.docker/machine/machines/default</dockerCertPath>-->
+                </configuration>
+
+                <!--2022-03-17 绑定Docker命令到Maven各个阶段-->
+                <executions>
+                    <execution>
+                        <id>build-image</id>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>build</goal> <!--这里的build就是docker build，打包的镜像名和tag就是上面定义的-->
+                        </goals>
+                    </execution>
+
+<!--                    <execution>-->
+<!--                        <id>tag-image</id>-->
+<!--                        <phase>package</phase>-->
+<!--                        <goals>-->
+<!--                            <goal>tag</goal>&lt;!&ndash;由于build时候已经打了tag，这里最好不用了，不然会出现2个镜像&ndash;&gt;-->
+<!--                        </goals>-->
+<!--                        <configuration>-->
+<!--                            <image>${docker.image.prefix}/${project.artifactId}</image>&lt;!&ndash;名称必须和前面build的镜像名称相同，否则找不到镜像&ndash;&gt;-->
+<!--&lt;!&ndash;                            <newName>docker.io/${docker.image.prefix}/047consumerdemo:${project.version}</newName>&ndash;&gt;-->
+<!--                            <newName>${docker.image.prefix}/${project.artifactId}:v20220317</newName>-->
+<!--                        </configuration>-->
+<!--                    </execution>-->
+
+<!--                    <execution>-->
+<!--                        <id>push-image</id>-->
+<!--                        <phase>deploy</phase>&lt;!&ndash;执行mvn deploy时会包含build，tag，push&ndash;&gt;-->
+<!--                        <goals>-->
+<!--                            <goal>push</goal>-->
+<!--                        </goals>-->
+<!--                        <configuration>-->
+<!--                            <imageName>docker.io/${docker.image.prefix}/${project.artifactId}:v20220317</imageName>-->
+<!--                        </configuration>-->
+<!--                    </execution>-->
+                </executions>
             </plugin>
         </plugins>
     </build>
